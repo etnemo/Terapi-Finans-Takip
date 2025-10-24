@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Session, PaymentStatus } from '../types';
-import { EditIcon, TrashIcon } from './icons';
+import { EditIcon, TrashIcon, SearchIcon } from './icons';
 
 interface SessionListProps {
   sessions: Session[];
   onEdit: (session: Session) => void;
   onDelete: (sessionId: string) => void;
   onUpdate: (sessionId: string, updatedData: Partial<Session>) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  statusFilter: PaymentStatus | 'all';
+  onStatusFilterChange: (status: PaymentStatus | 'all') => void;
+  dateFilter: { start: string, end: string };
+  onDateFilterChange: (filter: { start: string, end: string }) => void;
+  isFiltering: boolean;
 }
 
 const PaymentStatusTR: Record<PaymentStatus, string> = {
@@ -46,6 +53,17 @@ const SessionRow: React.FC<{
             }
             valueToSave = date.toISOString();
         }
+        if (field === 'sessionFee') {
+            const fee = parseFloat(value);
+             if (isNaN(fee) || fee < 0) {
+                setEditingField(null); // Invalid fee, cancel edit
+                return;
+            }
+            const commission = (fee / 1.1) / 2;
+            onUpdate(session.id, { sessionFee: fee, commission });
+            setEditingField(null);
+            return;
+        }
         
         if (session[field] !== valueToSave) {
             onUpdate(session.id, { [field]: valueToSave });
@@ -75,6 +93,8 @@ const SessionRow: React.FC<{
     localDate.setMinutes(localDate.getMinutes() - localDate.getTimezoneOffset());
     const dateForInput = localDate.toISOString().slice(0, 16);
 
+    const isOverdue = session.paymentStatus === PaymentStatus.WAITING && session.paymentDueDate && new Date() > new Date(session.paymentDueDate);
+
     return (
         <tr className="border-b border-gray-200 hover:bg-gray-50">
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" onClick={() => !editingField && setEditingField('patientName')}>
@@ -101,7 +121,24 @@ const SessionRow: React.FC<{
                     />
                  ) : formattedDate}
             </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => !editingField && setEditingField('sessionFee')}>
+                {editingField === 'sessionFee' ? (
+                    <input
+                        ref={inputRef as React.RefObject<HTMLInputElement>}
+                        type="number"
+                        defaultValue={session.sessionFee}
+                        onBlur={(e) => handleUpdate('sessionFee', e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, 'sessionFee')}
+                        className="w-full px-2 py-1 border border-primary-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                        min="0"
+                        step="0.01"
+                    />
+                ) : `₺${session.sessionFee.toFixed(2)}`}
+            </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₺{session.commission.toFixed(2)}</td>
+            <td className={`px-6 py-4 whitespace-nowrap text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                {session.paymentDueDate ? new Intl.DateTimeFormat('tr-TR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.paymentDueDate)) : '-'}
+            </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm" onClick={() => !editingField && setEditingField('paymentStatus')}>
                 {editingField === 'paymentStatus' ? (
                     <select
@@ -135,8 +172,14 @@ const SessionRow: React.FC<{
 };
 
 
-const SessionList: React.FC<SessionListProps> = ({ sessions, onEdit, onDelete, onUpdate }) => {
-  if (sessions.length === 0) {
+const SessionList: React.FC<SessionListProps> = ({ 
+    sessions, onEdit, onDelete, onUpdate, 
+    searchQuery, onSearchChange,
+    statusFilter, onStatusFilterChange,
+    dateFilter, onDateFilterChange,
+    isFiltering
+}) => {
+  if (sessions.length === 0 && !isFiltering) {
     return (
       <div className="text-center py-10 bg-white rounded-lg shadow-md">
         <h3 className="text-xl font-medium text-gray-700">Henüz kaydedilmiş seans yok.</h3>
@@ -145,30 +188,95 @@ const SessionList: React.FC<SessionListProps> = ({ sessions, onEdit, onDelete, o
     );
   }
 
-  const sortedSessions = [...sessions].sort((a, b) => new Date(b.sessionDate).getTime() - new Date(a.sessionDate).getTime());
+  const handleClearFilters = () => {
+    onSearchChange('');
+    onStatusFilterChange('all');
+    onDateFilterChange({ start: '', end: '' });
+  };
 
   return (
     <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Danışan</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih & Saat</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Komisyon</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                    <th scope="col" className="relative px-6 py-3">
-                    <span className="sr-only">İşlemler</span>
-                    </th>
-                </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                {sortedSessions.map(session => (
-                    <SessionRow key={session.id} session={session} onEdit={onEdit} onDelete={onDelete} onUpdate={onUpdate} />
-                ))}
-                </tbody>
-            </table>
+        <div className="p-4 border-b border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
+                 <div className="sm:col-span-2 lg:col-span-2">
+                    <label htmlFor="search" className="block text-sm font-medium text-gray-700">Danışan Adı</label>
+                    <div className="relative mt-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                            type="search"
+                            name="search"
+                            id="search"
+                            className="focus:ring-primary focus:border-primary block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                            placeholder="Danışan adına göre ara..."
+                            value={searchQuery}
+                            onChange={(e) => onSearchChange(e.target.value)}
+                            aria-label="Search by patient name"
+                        />
+                    </div>
+                </div>
+                 <div>
+                    <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">Ödeme Durumu</label>
+                    <select
+                        id="status-filter"
+                        value={statusFilter}
+                        onChange={e => onStatusFilterChange(e.target.value as PaymentStatus | 'all')}
+                        className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                    >
+                        <option value="all">Tümü</option>
+                        {Object.values(PaymentStatus).map(s => <option key={s} value={s}>{PaymentStatusTR[s]}</option>)}
+                    </select>
+                </div>
+                 <div>
+                    <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">Başlangıç Tarihi</label>
+                    <input type="date" id="start-date" value={dateFilter.start} onChange={e => onDateFilterChange({ ...dateFilter, start: e.target.value })} 
+                     className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="end-date" className="block text-sm font-medium text-gray-700">Bitiş Tarihi</label>
+                    <input type="date" id="end-date" value={dateFilter.end} onChange={e => onDateFilterChange({ ...dateFilter, end: e.target.value })} 
+                     className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-primary focus:border-primary"
+                    />
+                </div>
+                <div>
+                    <button onClick={handleClearFilters} className="w-full px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                        Filtreleri Temizle
+                    </button>
+                </div>
+            </div>
         </div>
+
+        {sessions.length > 0 ? (
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                    <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Danışan</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih & Saat</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ücret</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Komisyon</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Son Ödeme</th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                        <th scope="col" className="relative px-6 py-3">
+                        <span className="sr-only">İşlemler</span>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                    {sessions.map(session => (
+                        <SessionRow key={session.id} session={session} onEdit={onEdit} onDelete={onDelete} onUpdate={onUpdate} />
+                    ))}
+                    </tbody>
+                </table>
+            </div>
+        ) : (
+            <div className="text-center py-10 px-4">
+                <h3 className="text-xl font-medium text-gray-700">Filtre kriterlerine uygun seans bulunamadı.</h3>
+                <p className="mt-2 text-gray-500">Lütfen filtrelerinizi değiştirin veya temizleyin.</p>
+            </div>
+        )}
     </div>
   );
 };

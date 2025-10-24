@@ -1,3 +1,4 @@
+
 import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 
 // FIX: Use `Dispatch` and `SetStateAction` from `react` to resolve "Cannot find namespace 'React'" errors.

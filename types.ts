@@ -12,4 +12,6 @@ export interface Session {
   paymentStatus: PaymentStatus;
   sessionFee: number;
   commission: number;
+  paymentDueDate?: string; // ISO string format
+  paymentDate?: string; // ISO string format
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Session, PaymentStatus } from '../types';
 import { CloseIcon } from './icons';
@@ -20,6 +21,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ isOpen, onClose, onSave, sess
   const [sessionDate, setSessionDate] = useState('');
   const [sessionFee, setSessionFee] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(PaymentStatus.WAITING);
+  const [paymentDueDate, setPaymentDueDate] = useState('');
   const [error, setError] = useState('');
 
   const resetForm = useCallback(() => {
@@ -28,6 +30,14 @@ const SessionForm: React.FC<SessionFormProps> = ({ isOpen, onClose, onSave, sess
     // Format to 'YYYY-MM-DDTHH:mm' which is required by datetime-local input
     date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     setSessionDate(date.toISOString().slice(0, 16));
+
+    const dueDate = sessionToEdit?.paymentDueDate ? new Date(sessionToEdit.paymentDueDate) : new Date(date);
+    if (!sessionToEdit?.paymentDueDate) {
+        dueDate.setDate(dueDate.getDate() + 7); // Default due date 7 days later
+    }
+    setPaymentDueDate(dueDate.toISOString().slice(0, 10)); // YYYY-MM-DD for date input
+
+
     setSessionFee(sessionToEdit?.sessionFee.toString() || '');
     setPaymentStatus(sessionToEdit?.paymentStatus || PaymentStatus.WAITING);
     setError('');
@@ -41,7 +51,7 @@ const SessionForm: React.FC<SessionFormProps> = ({ isOpen, onClose, onSave, sess
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientName || !sessionDate || !sessionFee) {
+    if (!patientName || !sessionDate || !sessionFee || !paymentDueDate) {
       setError('Tüm alanlar zorunludur.');
       return;
     }
@@ -60,6 +70,8 @@ const SessionForm: React.FC<SessionFormProps> = ({ isOpen, onClose, onSave, sess
       sessionFee: sessionFeeNumber,
       commission: calculatedCommission,
       paymentStatus,
+      paymentDueDate: new Date(paymentDueDate).toISOString(),
+      paymentDate: sessionToEdit?.paymentDate, // Preserve existing payment date
     };
     onSave(newSession);
     onClose();
@@ -98,18 +110,31 @@ const SessionForm: React.FC<SessionFormProps> = ({ isOpen, onClose, onSave, sess
               required
             />
           </div>
-          <div>
-            <label htmlFor="sessionFee" className="block text-sm font-medium text-gray-700">Seans Ücreti (₺)</label>
-            <input
-              type="number"
-              id="sessionFee"
-              value={sessionFee}
-              onChange={(e) => setSessionFee(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-primary focus:border-primary"
-              required
-              min="0"
-              step="0.01"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+                <label htmlFor="sessionFee" className="block text-sm font-medium text-gray-700">Seans Ücreti (₺)</label>
+                <input
+                type="number"
+                id="sessionFee"
+                value={sessionFee}
+                onChange={(e) => setSessionFee(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-primary focus:border-primary"
+                required
+                min="0"
+                step="0.01"
+                />
+            </div>
+            <div>
+                <label htmlFor="paymentDueDate" className="block text-sm font-medium text-gray-700">Son Ödeme Tarihi</label>
+                <input
+                type="date"
+                id="paymentDueDate"
+                value={paymentDueDate}
+                onChange={(e) => setPaymentDueDate(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-primary focus:border-primary"
+                required
+                />
+            </div>
           </div>
           <div>
             <label htmlFor="paymentStatus" className="block text-sm font-medium text-gray-700">Ödeme Durumu</label>
