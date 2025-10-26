@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Session, PaymentStatus } from '../types';
 import { EditIcon, TrashIcon, SearchIcon } from './icons';
@@ -28,6 +29,13 @@ const statusColorMap: Record<PaymentStatus, string> = {
   [PaymentStatus.CANCELLED]: 'bg-red-100 text-red-800',
 };
 
+const formatCurrency = (value: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value);
+const parseFromInput = (value: string): number => {
+    if (!value) return 0;
+    const cleaned = value.replace(/\./g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
+};
+
 const SessionRow: React.FC<{
     session: Session, 
     onEdit: (session: Session) => void, 
@@ -35,6 +43,7 @@ const SessionRow: React.FC<{
     onUpdate: (sessionId: string, updatedData: Partial<Session>) => void
 }> = ({session, onEdit, onDelete, onUpdate}) => {
     const [editingField, setEditingField] = useState<keyof Session | null>(null);
+    const [editingValue, setEditingValue] = useState<string>('');
     const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
     useEffect(() => {
@@ -54,7 +63,7 @@ const SessionRow: React.FC<{
             valueToSave = date.toISOString();
         }
         if (field === 'sessionFee') {
-            const fee = parseFloat(value);
+            const fee = parseFromInput(value as string);
              if (isNaN(fee) || fee < 0) {
                 setEditingField(null); // Invalid fee, cancel edit
                 return;
@@ -78,6 +87,23 @@ const SessionRow: React.FC<{
         if (e.key === 'Escape') {
             setEditingField(null);
         }
+    };
+    
+    const handleFeeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { value } = e.target;
+        if (value === '') {
+            setEditingValue('');
+            return;
+        }
+        const cleanedValue = value.replace(/[^\d,]/g, '');
+        const parts = cleanedValue.split(',');
+        const integerPart = parts[0].replace(/\./g, '');
+        const formattedInteger = new Intl.NumberFormat('tr-TR').format(Number(integerPart) || 0);
+        let finalValue = formattedInteger;
+        if (parts.length > 1) {
+            finalValue += ',' + parts[1].slice(0, 2);
+        }
+        setEditingValue(finalValue);
     };
 
     const formattedDate = new Intl.DateTimeFormat('tr-TR', {
@@ -121,21 +147,21 @@ const SessionRow: React.FC<{
                     />
                  ) : formattedDate}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => !editingField && setEditingField('sessionFee')}>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => {if (!editingField) { setEditingField('sessionFee'); setEditingValue(session.sessionFee.toLocaleString('tr-TR')); }}}>
                 {editingField === 'sessionFee' ? (
                     <input
                         ref={inputRef as React.RefObject<HTMLInputElement>}
-                        type="number"
-                        defaultValue={session.sessionFee}
+                        type="text"
+                        inputMode="decimal"
+                        value={editingValue}
+                        onChange={handleFeeInputChange}
                         onBlur={(e) => handleUpdate('sessionFee', e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, 'sessionFee')}
                         className="w-full px-2 py-1 border border-primary-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-                        min="0"
-                        step="0.01"
                     />
-                ) : `₺${session.sessionFee.toFixed(2)}`}
+                ) : formatCurrency(session.sessionFee)}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₺{session.commission.toFixed(2)}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(session.commission)}</td>
             <td className={`px-6 py-4 whitespace-nowrap text-sm ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                 {session.paymentDueDate ? new Intl.DateTimeFormat('tr-TR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.paymentDueDate)) : '-'}
             </td>
@@ -194,6 +220,30 @@ const SessionList: React.FC<SessionListProps> = ({
     onDateFilterChange({ start: '', end: '' });
   };
 
+  const handleQuickDateFilter = (preset: 'thisMonth' | 'lastMonth' | 'thisYear') => {
+    const now = new Date();
+    let start = '';
+    let end = '';
+
+    const formatDate = (date: Date) => date.toISOString().slice(0, 10);
+
+    switch (preset) {
+      case 'thisMonth':
+        start = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
+        end = formatDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+        break;
+      case 'lastMonth':
+        start = formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        end = formatDate(new Date(now.getFullYear(), now.getMonth(), 0));
+        break;
+      case 'thisYear':
+        start = formatDate(new Date(now.getFullYear(), 0, 1));
+        end = formatDate(new Date(now.getFullYear(), 11, 31));
+        break;
+    }
+    onDateFilterChange({ start, end });
+  };
+
   return (
     <div className="bg-white shadow-md rounded-lg overflow-hidden">
         <div className="p-4 border-b border-gray-200">
@@ -245,6 +295,18 @@ const SessionList: React.FC<SessionListProps> = ({
                         Filtreleri Temizle
                     </button>
                 </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Hızlı Tarih Filtreleri:</span>
+              <button onClick={() => handleQuickDateFilter('thisMonth')} className="px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary">
+                Bu Ay
+              </button>
+              <button onClick={() => handleQuickDateFilter('lastMonth')} className="px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary">
+                Geçen Ay
+              </button>
+              <button onClick={() => handleQuickDateFilter('thisYear')} className="px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary">
+                Bu Yıl
+              </button>
             </div>
         </div>
 

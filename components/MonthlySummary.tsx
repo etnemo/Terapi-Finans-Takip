@@ -27,6 +27,8 @@ const statusColorMap: Record<PaymentStatus, string> = {
   [PaymentStatus.CANCELLED]: 'bg-red-100 text-red-800',
 };
 
+const formatCurrency = (value: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value);
+
 
 const MonthlySummary: React.FC<MonthlySummaryProps> = ({ sessions }) => {
   const monthlyData = sessions.reduce((acc, session) => {
@@ -138,19 +140,19 @@ const MonthlySummary: React.FC<MonthlySummaryProps> = ({ sessions }) => {
               </div>
               <div className="bg-indigo-50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-indigo-700">Toplam Gelir</p>
-                <p className="mt-1 text-3xl font-semibold text-indigo-600">₺{currentMonthData.totalIncome.toFixed(2)}</p>
+                <p className="mt-1 text-3xl font-semibold text-indigo-600">{formatCurrency(currentMonthData.totalIncome)}</p>
               </div>
                <div className="bg-red-50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-red-700">Ödenmemiş Bakiye</p>
-                <p className="mt-1 text-3xl font-semibold text-red-600">₺{currentMonthData.outstandingBalance.toFixed(2)}</p>
+                <p className="mt-1 text-3xl font-semibold text-red-600">{formatCurrency(currentMonthData.outstandingBalance)}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-green-700">Ödenen Komisyon</p>
-                <p className="mt-1 text-3xl font-semibold text-green-600">₺{currentMonthData.paidCommission.toFixed(2)}</p>
+                <p className="mt-1 text-3xl font-semibold text-green-600">{formatCurrency(currentMonthData.paidCommission)}</p>
               </div>
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm font-medium text-blue-700">Toplam Alacak</p>
-                <p className="mt-1 text-3xl font-semibold text-blue-600">₺{currentMonthData.totalCommission.toFixed(2)}</p>
+                <p className="mt-1 text-3xl font-semibold text-blue-600">{formatCurrency(currentMonthData.totalCommission)}</p>
               </div>
             </div>
 
@@ -159,11 +161,11 @@ const MonthlySummary: React.FC<MonthlySummaryProps> = ({ sessions }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-center">
                     <div className="bg-gray-100 p-6 rounded-lg">
                         <p className="text-lg font-medium text-gray-600">Toplam Gelir (Tüm Zamanlar)</p>
-                        <p className="mt-2 text-4xl font-bold text-primary-600">₺{overallTotalIncome.toFixed(2)}</p>
+                        <p className="mt-2 text-4xl font-bold text-primary-600">{formatCurrency(overallTotalIncome)}</p>
                     </div>
                     <div className="bg-red-50 p-6 rounded-lg">
                         <p className="text-lg font-medium text-red-700">Toplam Ödenmemiş Bakiye</p>
-                        <p className="mt-2 text-4xl font-bold text-red-600">₺{overallOutstandingBalance.toFixed(2)}</p>
+                        <p className="mt-2 text-4xl font-bold text-red-600">{formatCurrency(overallOutstandingBalance)}</p>
                     </div>
                 </div>
             </div>
@@ -202,7 +204,7 @@ const MonthlySummary: React.FC<MonthlySummaryProps> = ({ sessions }) => {
                                       hour: '2-digit', minute: '2-digit', hour12: false,
                                   }).format(new Date(session.sessionDate)).replace(/\./g, '/').replace(',', '')}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₺{session.sessionFee.toFixed(2)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(session.sessionFee)}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColorMap[session.paymentStatus]}`}>
                                       {PaymentStatusTR[session.paymentStatus]}

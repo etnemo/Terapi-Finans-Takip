@@ -8,6 +8,8 @@ interface PaymentsOverviewProps {
   onEdit: (session: Session) => void;
 }
 
+const formatCurrency = (value: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value);
+
 const PaymentsOverview: React.FC<PaymentsOverviewProps> = ({ sessions, onEdit }) => {
   const waitingSessions = sessions.filter(s => s.paymentStatus === PaymentStatus.WAITING);
   
@@ -37,7 +39,7 @@ const PaymentsOverview: React.FC<PaymentsOverviewProps> = ({ sessions, onEdit })
         <td className="px-4 py-3 text-sm text-gray-800">{session.patientName}</td>
         <td className="px-4 py-3 text-sm text-gray-500">{new Intl.DateTimeFormat('tr-TR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.sessionDate))}</td>
         <td className="px-4 py-3 text-sm text-gray-500 font-medium">{session.paymentDueDate ? new Intl.DateTimeFormat('tr-TR', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(session.paymentDueDate)) : '-'}</td>
-        <td className="px-4 py-3 text-sm text-gray-800 font-semibold">₺{session.sessionFee.toFixed(2)}</td>
+        <td className="px-4 py-3 text-sm text-gray-800 font-semibold">{formatCurrency(session.sessionFee)}</td>
         <td className="px-4 py-3 text-right">
             <button onClick={() => onEdit(session)} className="text-primary hover:text-primary-700">
                 <EditIcon className="w-5 h-5" />
@@ -52,7 +54,7 @@ const PaymentsOverview: React.FC<PaymentsOverviewProps> = ({ sessions, onEdit })
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
             <p className="font-bold">Toplam Ödenmemiş Bakiye</p>
-            <p className="text-3xl">₺{outstandingBalance.toFixed(2)}</p>
+            <p className="text-3xl">{formatCurrency(outstandingBalance)}</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

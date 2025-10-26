@@ -1,5 +1,5 @@
 {
-  "name": "TherapyLog",
+  "name": "TheraMoney",
   "description": "A standalone web application for psychotherapists to manage patient sessions and track payments. All data is stored locally in your browser.",
   "requestFramePermissions": []
 }

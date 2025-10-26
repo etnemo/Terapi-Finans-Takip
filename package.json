@@ -1,5 +1,5 @@
 {
-  "name": "therapylog",
+  "name": "theramoney",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,9 @@
   "dependencies": {
     "react-dom": "^19.2.0",
     "react": "^19.2.0",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/filesystem": "^7.1.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

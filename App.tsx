@@ -10,6 +10,8 @@ import Toast from './components/Toast';
 import Analytics from './components/Analytics';
 import PaymentsOverview from './components/PaymentsOverview';
 import BulkSessionForm, { BulkSessionData } from './components/BulkSessionForm';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 const App: React.FC = () => {
   const [sessions, setSessions] = useLocalStorage<Session[]>('sessions', []);
@@ -123,25 +125,76 @@ const App: React.FC = () => {
      setToastMessage('Seans durumu güncellendi!');
   };
 
-  const handleExport = () => {
-    if (sessions.length === 0) {
-      alert("Dışa aktarılacak veri bulunmamaktadır.");
+  const handleExport = async (format: 'json' | 'csv', dateRange: { start: string, end: string }) => {
+    const startDate = dateRange.start ? new Date(dateRange.start) : null;
+    if (startDate) startDate.setUTCHours(0, 0, 0, 0);
+
+    const endDate = dateRange.end ? new Date(dateRange.end) : null;
+    if (endDate) endDate.setUTCHours(23, 59, 59, 999);
+    
+    const sessionsToExport = sessions.filter(session => {
+        if (!startDate && !endDate) return true;
+        const sessionDate = new Date(session.sessionDate);
+        const isAfterStart = startDate ? sessionDate >= startDate : true;
+        const isBeforeEnd = endDate ? sessionDate <= endDate : true;
+        return isAfterStart && isBeforeEnd;
+    });
+
+    if (sessionsToExport.length === 0) {
+      alert("Seçilen kriterlere uygun dışa aktarılacak veri bulunmamaktadır.");
       return;
     }
-    const dataStr = JSON.stringify(sessions, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    
-    const exportFileDefaultName = `terapigunlugu_yedek_${new Date().toISOString().slice(0, 10)}.json`;
 
-    const linkElement = document.createElement('a');
-    linkElement.href = url;
-    linkElement.download = exportFileDefaultName;
-    document.body.appendChild(linkElement);
-    linkElement.click();
-    document.body.removeChild(linkElement);
-    URL.revokeObjectURL(url);
+    const dateSuffix = new Date().toISOString().slice(0, 10);
+    let dataStr: string;
+    let blobType: string;
+    let fileName: string;
+
+    if (format === 'csv') {
+        const header = 'id,patientName,sessionDate,sessionFee,commission,paymentStatus,paymentDueDate,paymentDate\n';
+        const rows = sessionsToExport.map(s => {
+            const patientName = `"${s.patientName.replace(/"/g, '""')}"`; // Handle quotes in patient names
+            return [s.id, patientName, s.sessionDate, s.sessionFee, s.commission, s.paymentStatus, s.paymentDueDate || '', s.paymentDate || ''].join(',');
+        }).join('\n');
+        dataStr = header + rows;
+        blobType = 'text/csv;charset=utf-8;';
+        fileName = `theramoney_backup_${dateSuffix}.csv`;
+    } else { // JSON export
+        dataStr = JSON.stringify(sessionsToExport, null, 2);
+        blobType = 'application/json';
+        fileName = `theramoney_backup_${dateSuffix}.json`;
+    }
+    
+    if (Capacitor.isNativePlatform()) {
+      // Use Capacitor Filesystem for native platforms
+      try {
+        await Filesystem.writeFile({
+          path: fileName,
+          data: dataStr,
+          directory: Directory.Documents,
+          encoding: Encoding.UTF8,
+        });
+        setToastMessage(`Dosya Belgeler'e kaydedildi: ${fileName}`);
+      } catch (e) {
+        console.error('Unable to write file', e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        alert(`Dosya kaydedilemedi: ${errorMessage}`);
+      }
+    } else {
+      // Use existing web download method for browsers
+      const dataBlob = new Blob([dataStr], { type: blobType });
+      const url = URL.createObjectURL(dataBlob);
+      
+      const linkElement = document.createElement('a');
+      linkElement.href = url;
+      linkElement.download = fileName;
+      document.body.appendChild(linkElement);
+      linkElement.click();
+      document.body.removeChild(linkElement);
+      URL.revokeObjectURL(url);
+    }
   };
+
 
   const handleImportClick = () => {
       fileInputRef.current?.click();
@@ -162,24 +215,103 @@ const App: React.FC = () => {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file) {
-          return;
-      }
+      if (!file) return;
+
+      const parseCsvLine = (line: string): string[] => {
+        const result: string[] = [];
+        let currentField = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"' && inQuotes) {
+                if (i + 1 < line.length && line[i + 1] === '"') {
+                    currentField += '"';
+                    i++; // Skip next quote
+                } else {
+                    inQuotes = false;
+                }
+            } else if (char === '"' && !inQuotes) {
+                inQuotes = true;
+            } else if (char === ',' && !inQuotes) {
+                result.push(currentField);
+                currentField = '';
+            } else {
+                currentField += char;
+            }
+        }
+        result.push(currentField);
+        return result;
+      };
 
       const reader = new FileReader();
       reader.onload = (e) => {
           try {
-              const text = e.target?.result;
+              const text = e.target?.result as string;
               if (typeof text !== 'string') {
                   throw new Error('File content is not readable text.');
               }
-              const importedSessions = JSON.parse(text);
-
-              if (!Array.isArray(importedSessions) || (importedSessions.length > 0 && !importedSessions.every(isValidSession))) {
-                  alert('Geçersiz dosya formatı. Lütfen geçerli bir seans JSON dosyası içe aktarın.');
-                  return;
-              }
               
+              let importedSessions: Session[] = [];
+
+              if (file.name.endsWith('.csv')) {
+                  const lines = text.trim().split(/\r?\n/);
+                  if (lines.length < 2) {
+                       alert('CSV dosyası boş veya sadece başlık satırı içeriyor.');
+                       return;
+                  }
+                  const header = lines[0].split(',').map(h => h.trim());
+                  const requiredHeaders = ['id', 'patientName', 'sessionDate', 'sessionFee', 'commission', 'paymentStatus'];
+                  if (!requiredHeaders.every(h => header.includes(h))) {
+                      alert(`Geçersiz CSV başlığı. Gerekli sütunlar: ${requiredHeaders.join(', ')}`);
+                      return;
+                  }
+
+                  for (let i = 1; i < lines.length; i++) {
+                      if (!lines[i].trim()) continue; // Skip empty lines
+                      
+                      const data = parseCsvLine(lines[i]);
+                      if (data.length !== header.length) {
+                        console.warn(`Skipping malformed CSV row ${i + 1}:`, lines[i]);
+                        continue;
+                      }
+
+                      const sessionObj: any = {};
+                      header.forEach((key, index) => {
+                         sessionObj[key] = data[index] || '';
+                      });
+
+                      const session: Partial<Session> = {
+                         id: sessionObj.id,
+                         patientName: sessionObj.patientName,
+                         sessionDate: sessionObj.sessionDate,
+                         sessionFee: parseFloat(sessionObj.sessionFee),
+                         commission: parseFloat(sessionObj.commission),
+                         paymentStatus: sessionObj.paymentStatus as PaymentStatus,
+                         paymentDueDate: sessionObj.paymentDueDate || undefined,
+                         paymentDate: sessionObj.paymentDate || undefined,
+                      };
+                      
+                      if (isValidSession(session)) {
+                           importedSessions.push(session as Session);
+                      } else {
+                          console.warn("Skipping invalid session from CSV:", session);
+                      }
+                  }
+
+              } else { // Assume JSON
+                  const jsonData = JSON.parse(text);
+                  if (!Array.isArray(jsonData) || (jsonData.length > 0 && !jsonData.every(isValidSession))) {
+                      alert('Geçersiz JSON formatı. Lütfen geçerli bir seans JSON dosyası içe aktarın.');
+                      return;
+                  }
+                  importedSessions = jsonData;
+              }
+
+              if (importedSessions.length === 0) {
+                   alert('Dosyada geçerli seans verisi bulunamadı.');
+                   return;
+              }
+
               const confirmMessage = `${importedSessions.length} seans içeren dosyayı içe aktarmak istediğinize emin misiniz? Bu işlem mevcut ${sessions.length} seansın üzerine yazılacaktır.`;
 
               if (window.confirm(confirmMessage)) {
@@ -204,6 +336,9 @@ const App: React.FC = () => {
       endDateObj.setUTCHours(23, 59, 59, 999);
     }
     const startDateObj = dateFilter.start ? new Date(dateFilter.start) : null;
+     if (startDateObj) {
+      startDateObj.setUTCHours(0, 0, 0, 0);
+    }
     
     return sessions.filter(session => {
         const nameMatch = session.patientName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -265,7 +400,7 @@ const App: React.FC = () => {
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
-        accept="application/json"
+        accept="application/json,.csv"
       />
     </>
   );

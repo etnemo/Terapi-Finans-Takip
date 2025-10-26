@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Session, PaymentStatus } from '../types';
 import { CloseIcon, PlusIcon, TrashIcon } from './icons';
@@ -6,6 +7,12 @@ const PaymentStatusTR: Record<PaymentStatus, string> = {
   [PaymentStatus.PAID]: 'Ödendi',
   [PaymentStatus.WAITING]: 'Beklemede',
   [PaymentStatus.CANCELLED]: 'İptal Edildi',
+};
+
+const parseFromInput = (value: string): number => {
+    if (!value) return 0;
+    const cleaned = value.replace(/\./g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
 };
 
 type NewSessionRow = {
@@ -62,7 +69,24 @@ const BulkSessionForm: React.FC<BulkSessionFormProps> = ({ isOpen, onClose, onSa
 
     const handleRowChange = (index: number, field: keyof NewSessionRow, value: string) => {
         const newRows = [...rows];
-        newRows[index] = { ...newRows[index], [field]: value };
+        
+        if (field === 'sessionFee') {
+            if (value === '') {
+                 newRows[index] = { ...newRows[index], [field]: '' };
+            } else {
+                const cleanedValue = value.replace(/[^\d,]/g, '');
+                const parts = cleanedValue.split(',');
+                const integerPart = parts[0].replace(/\./g, '');
+                const formattedInteger = new Intl.NumberFormat('tr-TR').format(Number(integerPart) || 0);
+                let finalValue = formattedInteger;
+                if (parts.length > 1) {
+                    finalValue += ',' + parts[1].slice(0, 2);
+                }
+                newRows[index] = { ...newRows[index], [field]: finalValue };
+            }
+        } else {
+            newRows[index] = { ...newRows[index], [field]: value };
+        }
         setRows(newRows);
         // Clear error for this field
         if (errors[index]?.[field]) {
@@ -86,8 +110,8 @@ const BulkSessionForm: React.FC<BulkSessionFormProps> = ({ isOpen, onClose, onSa
                 newErrors[index].sessionDate = 'Gerekli';
                 isValid = false;
             }
-            const fee = parseFloat(row.sessionFee);
-            if (!row.sessionFee || isNaN(fee) || fee < 0) {
+            const fee = parseFromInput(row.sessionFee);
+            if (!row.sessionFee || isNaN(fee) || fee <= 0) {
                 newErrors[index].sessionFee = 'Geçersiz';
                 isValid = false;
             }
@@ -104,7 +128,7 @@ const BulkSessionForm: React.FC<BulkSessionFormProps> = ({ isOpen, onClose, onSa
         const sessionsToSave: BulkSessionData[] = rows.map(row => ({
             patientName: row.patientName,
             sessionDate: row.sessionDate,
-            sessionFee: parseFloat(row.sessionFee),
+            sessionFee: parseFromInput(row.sessionFee),
             paymentStatus: row.paymentStatus,
         }));
         onSave(sessionsToSave);
@@ -140,13 +164,13 @@ const BulkSessionForm: React.FC<BulkSessionFormProps> = ({ isOpen, onClose, onSa
                                         className={`mt-1 w-full input ${errors[index]?.sessionDate ? 'border-red-500' : 'border-gray-300'}`} />
                                 </div>
                                 <div className="col-span-6 sm:col-span-2">
-                                    <label className="text-sm font-medium text-gray-700">Ücret (₺)</label>
-                                    <input type="number" value={row.sessionFee} onChange={e => handleRowChange(index, 'sessionFee', e.target.value)}
-                                        className={`mt-1 w-full input ${errors[index]?.sessionFee ? 'border-red-500' : 'border-gray-300'}`} min="0" />
+                                    <label className="text-sm font-medium text-gray-700">Ücret</label>
+                                    <input type="text" inputMode="decimal" value={row.sessionFee} onChange={e => handleRowChange(index, 'sessionFee', e.target.value)}
+                                        className={`mt-1 w-full input ${errors[index]?.sessionFee ? 'border-red-500' : 'border-gray-300'}`} />
                                 </div>
                                 <div className="col-span-6 sm:col-span-2">
                                     <label className="text-sm font-medium text-gray-700">Durum</label>
-                                    <select value={row.paymentStatus} onChange={e => handleRowChange(index, 'paymentStatus', e.target.value)}
+                                    <select value={row.paymentStatus} onChange={e => handleRowChange(index, 'paymentStatus', e.target.value as PaymentStatus)}
                                         className="mt-1 w-full input border-gray-300">
                                         {Object.values(PaymentStatus).map(s => <option key={s} value={s}>{PaymentStatusTR[s]}</option>)}
                                     </select>

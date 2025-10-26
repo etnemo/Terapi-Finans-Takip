@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Session, PaymentStatus } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
@@ -11,6 +12,8 @@ const PaymentStatusTR: Record<PaymentStatus, string> = {
   [PaymentStatus.WAITING]: 'Beklemede',
   [PaymentStatus.CANCELLED]: 'İptal Edildi',
 };
+
+const formatCurrency = (value: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value);
 
 const renderActiveShape = (props: any) => {
     const RADIAN = Math.PI / 180;
@@ -173,8 +176,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ sessions }) => {
                 <BarChart data={monthlyIncomeData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis tickFormatter={(value) => `₺${value}`} />
-                <Tooltip formatter={(value) => `₺${(value as number).toFixed(2)}`} />
+                <YAxis tickFormatter={(value) => new Intl.NumberFormat('tr-TR').format(value as number)} />
+                <Tooltip formatter={(value) => formatCurrency(value as number)} />
                 <Legend />
                 <Bar dataKey="Gelir" fill="#14b8a6" />
                 </BarChart>
